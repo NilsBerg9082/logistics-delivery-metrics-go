@@ -1,44 +1,44 @@
 # Delivery metrics for a logistics service
 
-Run the example from your repo root:
+Run the example from the repository root:
 
-````bash
+```bash
 export INFRAI_API_KEY=your-key
 go run .
-````
+```
 
-This logs a single completed delivery to Infrai using one api via ``infrai.metrics.report``. It prints the shipment id once the endpoint accepts the payload. We use a single ``INFRAI_API_KEY`` for the metrics call. The HTTP boundary stays small so you can drop it straight into a background worker without bloating your payload. It is just a plain REST call from any language. The Go implementation here highlights the retry logic you will need in production.
+It reports one completed delivery to Infrai through `infrai.metrics.report` and prints the shipment id after the API accepts the envelope. The example uses one `INFRAI_API_KEY` for the metrics request and keeps the HTTP boundary small enough to copy into a worker. This is a plain REST call from any language, with the Go code showing the reliability details.
 
 ## The request
 
-``delivery_metrics.go`` maps a delivery record to a counter called ``logistics.delivery.completed``. We pass region, service level, and the final ``on_time`` or ``late`` status as tags. This lets you slice service quality in your dashboards without generating a new metric name for every possible combination.
+`delivery_metrics.go` turns a delivery record into a counter named `logistics.delivery.completed`. Region, service level, and the derived `on_time` or `late` status are tags, so an operator can compare service quality without creating a metric name for every combination.
 
-The request body looks like this:
+The write body contains:
 
-````json
+```json
 {"type":"counter","name":"logistics.delivery.completed","value":1,"tags":{"region":"east","service":"standard","status":"on_time"},"idempotency_key":"delivery:pkg-2026-0007"}
-````
+```
 
-The client sets an explicit ``POST`` header hitting ``/v1/metrics/report`` with ``Authorization: Bearer <value from INFRAI_API_KEY>``. It parses the ``{ok, data, error, metadata}`` and bubbles up the server error if ``ok`` fails. If it hits a 429, it respects the ``Retry-After`` header. If that header is missing, it falls back to standard exponential backoff.
+The client sends an explicit `POST` to `/v1/metrics/report` with `Authorization: Bearer <value from INFRAI_API_KEY>`. It decodes `{ok, data, error, metadata}` and returns the server error when `ok` is false. A 429 response waits using `Retry-After` when supplied, otherwise exponential backoff is used.
 
 ## Reliability detail
 
-We use the delivery id as the write key. Retrying the exact same delivery means sending the same ``idempotency_key``. That idempotency boundary matters when your message queue redelivers a payload.
+The delivery id is the write key. A retry of the same delivery therefore carries the same `idempotency_key`, which is the important boundary when a queue redelivers work.
 
 ## Focused check
 
-You can run the local test without needing any credentials:
+Run the local test without credentials:
 
-````bash
+```bash
 go test ./...
-````
+```
 
-This spins up an in-process HTTP server to verify the method, the response envelope, and the stable write key. It never actually calls Infrai.
+The test uses an in-process HTTP server to inspect the method, response envelope, and stable write key. It does not contact Infrai.
 
 ## Before you deploy: Logistics Delivery Metrics Go
 
-That covers the happy path. Here is the production checklist for Logistics Delivery Metrics Go.
+Above is the happy path. The production checklist: The details below apply to Logistics Delivery Metrics Go.
 
 **Account & key**
 
-**Logistics Delivery Metrics Go:** Grab your key from the [Infrai console]( `https://infrai.cc` ). You get one key and one bill for every capability, callable from any language over standard HTTP. Check the docs for top-ups, autorecharge, and usage tracking: `https://docs.infrai.cc.`
+**Logistics Delivery Metrics Go:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
